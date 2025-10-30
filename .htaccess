@@ -1,0 +1,2 @@
+RewriteEngine On
+RewriteRule ^([a-zA-Z0-9_-]{11})\.mp3$ watch.php?videoid=$1 [L]
