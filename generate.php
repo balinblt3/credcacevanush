@@ -9,40 +9,78 @@ $videoid = $_GET['videoid'] ?? '';
 
 $cache_dir = __DIR__ . '/cache/'; 
 $mp3_file = $cache_dir . $videoid . '.mp3';
-$log_file = $cache_dir . $videoid . '.log'; // Pentru a urmări erorile FFmpeg
+$log_file = $cache_dir . $videoid . '.log'; 
 
-// 1. Asigură-te că directorul de cache există și are permisiuni de scriere
 if (!is_dir($cache_dir)) {
     mkdir($cache_dir, 0777, true);
 }
 
-// 2. Verifică dacă fișierul este deja salvat
+// 1. Verifică dacă fișierul este deja salvat
 if (file_exists($mp3_file)) {
+    http_response_code(200);
     exit("Cache already exists for $videoid.");
 }
 
-// =========================================================================================
-// !!! ATENȚIE: LOGICA DE EXTRACȚIE TREBUIE COPIATĂ AICI !!!
-// Copiază TOT codul din watch.php-ul vechi (pașii 1 și 2: extragere, citire stream, găsire URL)
-// și asigură-te că variabila $final_audio_url este setată corect.
-// Voi folosi un placeholder.
+// Pasul 2: Extragerea URL-ului de la ytdlp.online
+$api_url = "https://ytdlp.online/stream?command=" . urlencode("--get-url https://www.youtube.com/watch?v=" . $videoid);
 
-// ***************************************************************
-// COPIAZĂ LOGICA DE EXTRACȚIE AICI ȘI SETEAZĂ $final_audio_url
-// ***************************************************************
-$final_audio_url = 'ADRESA_URL_EXTRASA_DE_LA_YTDLP_ONLINE'; 
+$context = stream_context_create([
+    'http' => [
+        'timeout' => 30,
+        'header' => "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64)\r\n"
+    ]
+]);
 
-// Dacă nu reușește extracția
-if (!$final_audio_url || $final_audio_url == 'ADRESA_URL_EXTRASA_DE_LA_YTDLP_ONLINE') {
+$stream = @fopen($api_url, 'r', false, $context);
+if (!$stream) {
     http_response_code(500);
-    exit('Failed to retrieve streaming URL. Check ytdlp logic.');
+    exit('Failed to connect to API');
 }
 
-// 4. Comanda FFmpeg pentru SALVARE pe disc
+$audio_count = 0;
+$first_audio_url = null;
+$second_audio_url = null; 
+
+while (!feof($stream)) {
+    $line = fgets($stream);
+    if ($line === false) break;
+
+    if (strpos($line, 'data: https://') === 0) {
+        $url = trim(substr($line, 6)); 
+
+        if (strpos($url, 'mime=audio') !== false || 
+            strpos($url, 'itag=140') !== false || 
+            strpos($url, 'itag=251') !== false ||
+            strpos($url, 'itag=249') !== false) {
+            
+            $audio_count++;
+            
+            if ($audio_count === 1) {
+                $first_audio_url = $url;
+            }
+            
+            if ($audio_count === 2) {
+                $second_audio_url = $url;
+                break;
+            }
+        }
+    }
+}
+
+fclose($stream);
+
+$final_audio_url = $second_audio_url ?: $first_audio_url;
+
+if (!$final_audio_url) {
+    http_response_code(404);
+    exit('No audio URL found');
+}
+
+// Pasul 3: Comanda FFmpeg pentru SALVARE pe disc
+// Folosește comanda 'exec' pentru a rula în background
 $ffmpeg_command = "ffmpeg -i " . escapeshellarg($final_audio_url) . 
                   " -vn -acodec libmp3lame -b:a 192k -f mp3 " . 
                   escapeshellarg($mp3_file) . " > " . escapeshellarg($log_file) . " 2>&1 &"; 
-                  // '&' la final rulează procesul în background.
 
 exec($ffmpeg_command);
 
