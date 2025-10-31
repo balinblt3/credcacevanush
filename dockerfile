@@ -1,9 +1,10 @@
 # Imaginea de bază PHP cu serverul Apache inclus
 FROM php:8.2-apache
 
-# 1. Instalează pachetele necesare, inclusiv FFmpeg și libmp3lame
+# 1. Instalează pachetele necesare: FFmpeg și librăria LAME corectă
+# libmp3lame0 este librăria de runtime LAME pe Debian.
 RUN apt-get update && \
-    apt-get install -y ffmpeg libmp3lame-tools && \
+    apt-get install -y ffmpeg libmp3lame0 && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
@@ -20,6 +21,7 @@ COPY .htaccess /var/www/html/
 COPY index.html /var/www/html/
 
 # 5. Setează permisiunile (FOARTE IMPORTANT: Permite Apache să scrie în directorul cache)
+# Creează directorul 'cache' în interiorul /var/www/html și dă-i permisiuni de scriere
 RUN mkdir /var/www/html/cache && \
     chown -R www-data:www-data /var/www/html
 
